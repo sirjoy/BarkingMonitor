@@ -1,0 +1,7 @@
+tensorflow
+tensorflow_hub
+sounddevice
+numpy
+PyQt6
+matplotlib
+pandas
