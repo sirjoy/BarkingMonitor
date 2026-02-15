@@ -26,8 +26,8 @@ class BarkDetector:
         self.model = hub.load("https://tfhub.dev/google/yamnet/1")
         class_map = self.model.class_map_path().numpy().decode("utf-8")
         class_names = pd.read_csv(class_map)["display_name"].tolist()
-        self.bark_index = class_names.index("Dog bark")
-        LOGGER.info("YAMNet loaded. Dog bark class index=%s", self.bark_index)
+        self.bark_index = class_names.index("Bark")
+        LOGGER.info("YAMNet loaded. Bark class index=%s", self.bark_index)
 
     def detect(self, audio: np.ndarray) -> DetectionResult:
         waveform = tf.convert_to_tensor(audio, dtype=tf.float32)

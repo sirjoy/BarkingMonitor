@@ -4,7 +4,8 @@ from datetime import date
 from pathlib import Path
 
 import pandas as pd
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import QTimer, Qt
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QFont, QColor
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -49,6 +50,12 @@ class MainWindow(QMainWindow):
         self.db = db
         self.engine = engine
         self.setWindowTitle("Dog Bark Monitor")
+        
+        # Create dog icon
+        icon = self._create_dog_icon()
+        self.setWindowIcon(icon)
+        app.setWindowIcon(icon)
+        
         self.resize(1100, 760)
 
         self.tabs = QTabWidget()
@@ -69,6 +76,22 @@ class MainWindow(QMainWindow):
         if config.auto_start:
             self.engine.start()
 
+    def _create_dog_icon(self) -> QIcon:
+        """Create a dog emoji icon for the application."""
+        pixmap = QPixmap(128, 128)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Draw dog emoji
+        font = QFont("Apple Color Emoji", 96)
+        painter.setFont(font)
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "🐕")
+        
+        painter.end()
+        return QIcon(pixmap)
+
     def _build_main_tab(self) -> QWidget:
         w = QWidget()
         layout = QVBoxLayout(w)
@@ -79,14 +102,29 @@ class MainWindow(QMainWindow):
         self.counter_label = QLabel("0")
         self.conf_meter = QProgressBar()
         self.conf_meter.setRange(0, 100)
+        self.conf_meter.setFormat("%p%")
+        self.conf_meter.setTextVisible(True)
+        self.conf_meter.setMinimumHeight(25)
         form.addRow("State", self.status_label)
         form.addRow("Today's Events", self.counter_label)
         form.addRow("Confidence", self.conf_meter)
 
         controls = QHBoxLayout()
         start_btn = QPushButton("Start Listening")
+        start_btn.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; font-weight: bold; padding: 8px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #45a049; }"
+        )
         pause_btn = QPushButton("Pause Listening")
+        pause_btn.setStyleSheet(
+            "QPushButton { background-color: #FF9800; color: white; font-weight: bold; padding: 8px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #e68900; }"
+        )
         stop_btn = QPushButton("Stop Listening")
+        stop_btn.setStyleSheet(
+            "QPushButton { background-color: #f44336; color: white; font-weight: bold; padding: 8px; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #da190b; }"
+        )
         start_btn.clicked.connect(self._on_start)
         pause_btn.clicked.connect(self._on_pause)
         stop_btn.clicked.connect(self._on_stop)
@@ -198,9 +236,59 @@ class MainWindow(QMainWindow):
         save_config(self.config)
 
     def refresh(self):
-        self.status_label.setText("Listening" if self.engine.stats.listening else "Paused")
+        if self.engine.stats.listening:
+            self.status_label.setText("● LISTENING")
+            self.status_label.setStyleSheet(
+                "QLabel { "
+                "background-color: #4CAF50; "
+                "color: white; "
+                "padding: 8px; "
+                "border-radius: 4px; "
+                "font-weight: bold; "
+                "font-size: 14px; "
+                "}"
+            )
+        else:
+            self.status_label.setText("⏸ PAUSED")
+            self.status_label.setStyleSheet(
+                "QLabel { "
+                "background-color: #FF9800; "
+                "color: white; "
+                "padding: 8px; "
+                "border-radius: 4px; "
+                "font-weight: bold; "
+                "font-size: 14px; "
+                "}"
+            )
         self.counter_label.setText(str(self.engine.stats.today_count))
-        self.conf_meter.setValue(int(self.engine.stats.latest_confidence * 100))
+        
+        conf_value = int(self.engine.stats.latest_confidence * 100)
+        self.conf_meter.setValue(conf_value)
+        
+        if conf_value >= 80:
+            color = "#4CAF50"
+        elif conf_value >= 60:
+            color = "#8BC34A"
+        elif conf_value >= 40:
+            color = "#FFC107"
+        elif conf_value >= 20:
+            color = "#FF9800"
+        else:
+            color = "#F44336"
+        
+        self.conf_meter.setStyleSheet(
+            f"QProgressBar {{"
+            f"border: 2px solid #ddd;"
+            f"border-radius: 5px;"
+            f"text-align: center;"
+            f"background-color: #f0f0f0;"
+            f"font-weight: bold;"
+            f"}}"
+            f"QProgressBar::chunk {{"
+            f"background-color: {color};"
+            f"border-radius: 3px;"
+            f"}}"
+        )
 
     def _events_df(self, start: str, end: str) -> pd.DataFrame:
         rows = self.db.events_for_range(start, end)
