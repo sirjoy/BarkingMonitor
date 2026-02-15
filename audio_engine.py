@@ -79,9 +79,15 @@ class AudioEngine:
         self._stop_evt.set()
         self.stats.listening = False
         self._finalize_active_event()
+        
         for t in self._threads:
             t.join(timeout=2.0)
-        self._stream = None
+            if t.is_alive():
+                LOGGER.warning("Thread %s did not stop in time", t.name)
+        
+        if self._stream is not None:
+            self._stream.abort(ignore_errors=True)
+            self._stream = None
 
     def _audio_callback(self, indata, frames, time_info, status):
         if status:
