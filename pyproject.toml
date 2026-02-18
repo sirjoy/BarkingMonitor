@@ -1,7 +1,7 @@
 [project]
 name = "barkingmonitor"
 version = "0.1.0"
-description = "Add your description here"
+description = "Detects barking events daily and stores data"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [

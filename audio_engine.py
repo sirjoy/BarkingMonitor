@@ -190,7 +190,7 @@ class AudioEngine:
     def _check_day_change(self) -> None:
         """Check if the day has changed and reset today's count if needed.
         
-        DELETE - This method resets the daily event counter when a new day is detected.
+        This method resets the daily event counter when a new day is detected.
         """
         today = date.today().isoformat()
         if today != self.stats.current_day:
@@ -211,8 +211,8 @@ class AudioEngine:
             duration_sec=duration,
             avg_confidence=avg_conf,
         )
-        self.db.add_event(event)
         self._check_day_change()
+        self.db.add_event(event)
         self.stats.today_count += 1
         if self.on_event:
             self.on_event(event)
