@@ -343,20 +343,88 @@ class MainWindow(QMainWindow):
     def export_selected_day(self):
         item = self.day_list.currentItem()
         if not item:
+            QMessageBox.warning(self, "No Selection", "Please select a day to export.")
             return
         day = item.text()
         rows = self.db.events_for_range(day, day)
-        stamp = day.replace("-", "")
-        self.db.export_json(rows, APP_DIR / "exports" / f"barks_{stamp}.json")
-        self.db.export_csv(rows, APP_DIR / "exports" / f"barks_{stamp}.csv")
+        
+        if not rows:
+            QMessageBox.information(self, "No Data", f"No bark events found for {day}.")
+            return
+        
+        try:
+            stamp = day.replace("-", "")
+            json_path = APP_DIR / "exports" / f"barks_{stamp}.json"
+            csv_path = APP_DIR / "exports" / f"barks_{stamp}.csv"
+            
+            self.db.export_json(rows, json_path)
+            self.db.export_csv(rows, csv_path)
+            
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setWindowTitle("Export Successful")
+            msg.setText(f"Exported {len(rows)} events for {day}")
+            msg.setInformativeText(f"Files saved to:\n{APP_DIR / 'exports'}")
+            msg.setStandardButtons(QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Ok)
+            msg.setDefaultButton(QMessageBox.StandardButton.Ok)
+            
+            result = msg.exec()
+            if result == QMessageBox.StandardButton.Open:
+                self._open_exports_folder()
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Failed", f"Failed to export data:\n{str(exc)}")
 
     def export_range(self):
         start = self.range_start.date().toPyDate().isoformat()
         end = self.range_end.date().toPyDate().isoformat()
+        
+        if start > end:
+            QMessageBox.warning(self, "Invalid Range", "Start date must be before or equal to end date.")
+            return
+        
         rows = self.db.events_for_range(start, end)
-        stamp = f"{start}_to_{end}".replace("-", "")
-        self.db.export_json(rows, APP_DIR / "exports" / f"barks_{stamp}.json")
-        self.db.export_csv(rows, APP_DIR / "exports" / f"barks_{stamp}.csv")
+        
+        if not rows:
+            QMessageBox.information(self, "No Data", f"No bark events found between {start} and {end}.")
+            return
+        
+        try:
+            stamp = f"{start}_to_{end}".replace("-", "")
+            json_path = APP_DIR / "exports" / f"barks_{stamp}.json"
+            csv_path = APP_DIR / "exports" / f"barks_{stamp}.csv"
+            
+            self.db.export_json(rows, json_path)
+            self.db.export_csv(rows, csv_path)
+            
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Information)
+            msg.setWindowTitle("Export Successful")
+            msg.setText(f"Exported {len(rows)} events from {start} to {end}")
+            msg.setInformativeText(f"Files saved to:\n{APP_DIR / 'exports'}")
+            msg.setStandardButtons(QMessageBox.StandardButton.Open | QMessageBox.StandardButton.Ok)
+            msg.setDefaultButton(QMessageBox.StandardButton.Ok)
+            
+            result = msg.exec()
+            if result == QMessageBox.StandardButton.Open:
+                self._open_exports_folder()
+        except Exception as exc:
+            QMessageBox.critical(self, "Export Failed", f"Failed to export data:\n{str(exc)}")
+
+    def _open_exports_folder(self):
+        """Open the exports folder in the system file manager."""
+        import subprocess
+        import sys
+        
+        exports_path = APP_DIR / "exports"
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["open", str(exports_path)])
+            elif sys.platform == "win32":
+                subprocess.run(["explorer", str(exports_path)])
+            else:
+                subprocess.run(["xdg-open", str(exports_path)])
+        except Exception as exc:
+            QMessageBox.warning(self, "Cannot Open Folder", f"Could not open exports folder:\n{str(exc)}")
 
     def closeEvent(self, event):
         self.engine.stop()
