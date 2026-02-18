@@ -127,13 +127,14 @@ class AudioEngine:
         ring = np.zeros(self.window_samples, dtype=np.float32)
         filled = 0
         while not self._stop_evt.is_set():
+            now = datetime.now()
+            if (now - self._last_day_check).total_seconds() >= 60:
+                self._check_day_change()
+                self._last_day_check = now
+            
             try:
                 hop = self._audio_queue.get(timeout=0.5)
             except queue.Empty:
-                now = datetime.now()
-                if (now - self._last_day_check).total_seconds() >= 60:
-                    self._check_day_change()
-                    self._last_day_check = now
                 continue
 
             if len(hop) != self.hop_samples:
