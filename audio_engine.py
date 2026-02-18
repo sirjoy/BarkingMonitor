@@ -23,6 +23,7 @@ class RuntimeStats:
     listening: bool = False
     latest_confidence: float = 0.0
     today_count: int = 0
+    current_day: str = ""
 
 
 class AudioEngine:
@@ -49,10 +50,13 @@ class AudioEngine:
         self._consecutive = 0
         self._cooldown_until = datetime.min
         self._active_event: Optional[dict] = None
+        self._last_day_check = datetime.min
 
         self.window_samples = int(config.sample_rate * config.window_seconds)
         self.hop_samples = int(config.sample_rate * config.hop_seconds)
-        self.stats.today_count = self.db.count_for_day(date.today().isoformat())
+        today = date.today().isoformat()
+        self.stats.today_count = self.db.count_for_day(today)
+        self.stats.current_day = today
 
     def start(self) -> None:
         if self.stats.listening:
@@ -126,6 +130,10 @@ class AudioEngine:
             try:
                 hop = self._audio_queue.get(timeout=0.5)
             except queue.Empty:
+                now = datetime.now()
+                if (now - self._last_day_check).total_seconds() >= 60:
+                    self._check_day_change()
+                    self._last_day_check = now
                 continue
 
             if len(hop) != self.hop_samples:
@@ -179,6 +187,17 @@ class AudioEngine:
         if gap > self.config.merge_gap_seconds:
             self._finalize_active_event()
 
+    def _check_day_change(self) -> None:
+        """Check if the day has changed and reset today's count if needed.
+        
+        DELETE - This method resets the daily event counter when a new day is detected.
+        """
+        today = date.today().isoformat()
+        if today != self.stats.current_day:
+            LOGGER.info("Day changed from %s to %s - resetting today_count", self.stats.current_day, today)
+            self.stats.current_day = today
+            self.stats.today_count = self.db.count_for_day(today)
+
     def _finalize_active_event(self) -> None:
         if not self._active_event:
             return
@@ -193,6 +212,7 @@ class AudioEngine:
             avg_confidence=avg_conf,
         )
         self.db.add_event(event)
+        self._check_day_change()
         self.stats.today_count += 1
         if self.on_event:
             self.on_event(event)
