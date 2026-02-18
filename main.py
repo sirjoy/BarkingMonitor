@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import QApplication
 from audio_engine import AudioEngine
 from config import APP_DIR, ensure_dirs, load_config
 from database import BarkDatabase
-from detector import BarkDetector
+from detector import BarkDetector, ThunderDetector
 from gui import MainWindow
 
 
@@ -35,7 +35,17 @@ def main() -> int:
     config = load_config()
     db = BarkDatabase()
     detector = BarkDetector(threshold=config.detection_threshold)
-    engine = AudioEngine(config=config, detector=detector, db=db)
+    
+    thunder_detector = None
+    if config.enable_thunder_monitoring:
+        thunder_detector = ThunderDetector(threshold=config.thunder_detection_threshold)
+    
+    engine = AudioEngine(
+        config=config, 
+        detector=detector, 
+        db=db,
+        thunder_detector=thunder_detector
+    )
 
     app = QApplication(sys.argv)
     win = MainWindow(app=app, config=config, db=db, engine=engine)

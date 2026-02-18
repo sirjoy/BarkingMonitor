@@ -19,6 +19,10 @@ class AppConfig:
     cooldown_seconds: float = 2.0
     merge_gap_seconds: float = 2.0
     auto_start: bool = False
+    enable_thunder_monitoring: bool = True
+    thunder_detection_threshold: float = 0.55
+    thunder_consecutive_required: int = 2
+    thunder_cooldown_seconds: float = 2.0
 
 
 DEFAULT_CONFIG = AppConfig()
