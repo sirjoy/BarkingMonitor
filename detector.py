@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import os
+import shutil
 from dataclasses import dataclass
 
 import numpy as np
@@ -10,24 +12,109 @@ import tensorflow_hub as hub
 
 LOGGER = logging.getLogger(__name__)
 
-
+_YAMNET_URL = "https://tfhub.dev/google/yamnet/1"
 _YAMNET_MODEL = None
 _CLASS_NAMES = None
 
 
-def _get_yamnet_model():
-    """Load YAMNet model singleton to avoid loading multiple times.
-    
+def _get_tfhub_cache_dir() -> str:
+    """Return the TF Hub module cache directory.
+
     Returns:
-        Tuple of (model, class_names list)
+        Absolute path to the TF Hub cache directory.
+    """
+    return os.environ.get(
+        "TFHUB_CACHE_DIR",
+        os.path.join(os.environ.get("TMPDIR", "/tmp"), "tfhub_modules"),
+    )
+
+
+def _is_cache_corrupt(cache_dir: str) -> bool:
+    """Check whether the TF Hub cache directory contains an incomplete model.
+
+    A valid SavedModel must contain at least a ``saved_model.pb`` or
+    ``saved_model.pbtxt`` file at its root.  Any sub-directory that lacks
+    both files is considered corrupt.
+
+    Args:
+        cache_dir: Path to the TF Hub modules cache directory.
+
+    Returns:
+        ``True`` if a corrupt model directory is detected, ``False`` otherwise.
+    """
+    if not os.path.isdir(cache_dir):
+        return False
+    for entry in os.scandir(cache_dir):
+        if not entry.is_dir():
+            continue
+        files = {f.name for f in os.scandir(entry.path)}
+        if "saved_model.pb" not in files and "saved_model.pbtxt" not in files:
+            LOGGER.warning(
+                "Corrupt TF Hub cache detected at '%s' (missing saved_model.pb).",
+                entry.path,
+            )
+            return True
+    return False
+
+
+def _clear_tfhub_cache(cache_dir: str) -> None:
+    """Remove the TF Hub cache directory so models are re-downloaded.
+
+    Args:
+        cache_dir: Path to the TF Hub modules cache directory to remove.
+    """
+    if os.path.isdir(cache_dir):
+        shutil.rmtree(cache_dir)
+        LOGGER.info("Cleared TF Hub cache at '%s'.", cache_dir)
+
+
+def _load_yamnet_with_recovery() -> tuple:
+    """Load the YAMNet model, automatically recovering from a corrupt cache.
+
+    On first failure with a ``ValueError`` (corrupt/unknown model type), the
+    cache is cleared and the download is retried once.
+
+    Returns:
+        Tuple of (model, class_names list).
+
+    Raises:
+        RuntimeError: If the model cannot be loaded after the recovery attempt.
+    """
+    cache_dir = _get_tfhub_cache_dir()
+
+    if _is_cache_corrupt(cache_dir):
+        LOGGER.warning("Corrupt TF Hub cache found before loading. Clearing and retrying.")
+        _clear_tfhub_cache(cache_dir)
+
+    for attempt in range(1, 3):
+        try:
+            LOGGER.info("Loading YAMNet model (attempt %d)...", attempt)
+            model = hub.load(_YAMNET_URL)
+            class_map = model.class_map_path().numpy().decode("utf-8")
+            class_names = pd.read_csv(class_map)["display_name"].tolist()
+            LOGGER.info("YAMNet loaded with %d classes", len(class_names))
+            return model, class_names
+        except ValueError as exc:
+            LOGGER.error("Failed to load YAMNet model: %s", exc)
+            if attempt == 1:
+                LOGGER.warning("Attempting recovery: clearing TF Hub cache and retrying.")
+                _clear_tfhub_cache(cache_dir)
+            else:
+                raise RuntimeError(
+                    "YAMNet model could not be loaded after cache recovery."
+                ) from exc
+    raise RuntimeError("YAMNet model could not be loaded.")  # DELETE - unreachable guard
+
+
+def _get_yamnet_model() -> tuple:
+    """Return the YAMNet model singleton, loading it on first call.
+
+    Returns:
+        Tuple of (model, class_names list).
     """
     global _YAMNET_MODEL, _CLASS_NAMES
     if _YAMNET_MODEL is None:
-        LOGGER.info("Loading YAMNet model from TensorFlow Hub...")
-        _YAMNET_MODEL = hub.load("https://tfhub.dev/google/yamnet/1")
-        class_map = _YAMNET_MODEL.class_map_path().numpy().decode("utf-8")
-        _CLASS_NAMES = pd.read_csv(class_map)["display_name"].tolist()
-        LOGGER.info("YAMNet loaded with %d classes", len(_CLASS_NAMES))
+        _YAMNET_MODEL, _CLASS_NAMES = _load_yamnet_with_recovery()
     return _YAMNET_MODEL, _CLASS_NAMES
 
 
